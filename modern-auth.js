@@ -19,8 +19,7 @@ class ModernAuth {
     try {
       const credentials = JSON.parse(fs.readFileSync(this.credentialsPath));
       
-      // Use a random high port to avoid conflicts
-      const port = 8000 + Math.floor(Math.random() * 1000);
+      const port = 8080;
       const redirectUri = `http://localhost:${port}/callback`;
       
       const oauth2Client = new google.auth.OAuth2(
@@ -46,11 +45,14 @@ class ModernAuth {
         prompt: 'consent'
       });
 
-      console.log(chalk.cyan('🔗 Please visit this URL to authorize:'));
-      console.log(chalk.blue(authUrl));
+      console.log(chalk.cyan('🔗 Opening browser for authorization...'));
+      console.log(chalk.gray(authUrl));
       console.log(chalk.yellow(`\n⚡ A temporary server is running on port ${port}`));
       console.log(chalk.yellow('After authorization, you\'ll be redirected automatically.'));
       console.log(chalk.gray('Waiting for authorization...'));
+
+      const { exec } = require('child_process');
+      exec(`open "${authUrl}"`);
       
       // The server will handle the rest
       return new Promise((resolve, reject) => {

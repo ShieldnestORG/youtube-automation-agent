@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ethereal Dreamscript - YouTube Automation Dashboard</title>
+    <title>Tokns_fi - YouTube Automation Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -164,7 +164,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎬 Ethereal Dreamscript</h1>
+            <h1>🎬 Tokns_fi</h1>
             <p>YouTube Automation Dashboard</p>
         </div>
         
@@ -208,16 +208,24 @@
                     <div id="upcoming-schedule" class="loading">Loading schedule...</div>
                 </div>
             </div>
+
+            <div class="dashboard-card">
+                <h2>🚀 Publish Queue</h2>
+                <div class="card-content">
+                    <div id="publish-queue" class="loading">Loading queue...</div>
+                </div>
+            </div>
             
             <div class="dashboard-card">
                 <h2>🎯 Content Strategy</h2>
                 <div class="card-content">
                     <div id="content-strategy">
-                        <p><strong>Current Focus:</strong> Animated Storytelling</p>
-                        <p><strong>Target Audience:</strong> Creative individuals interested in storytelling and imagination</p>
-                        <p><strong>Content Types:</strong> Story-driven content, Explainers, Tutorials</p>
+                        <p><strong>Current Focus:</strong> Crypto, TX Blockchain & Motivation</p>
+                        <p><strong>Target Audience:</strong> Crypto investors, TX ecosystem followers, self-improvement seekers</p>
+                        <p><strong>Content Types:</strong> Explainers, List videos, Tutorials</p>
                         <p><strong>Posting Frequency:</strong> Daily</p>
                         <p><strong>Optimal Time:</strong> 2:00 PM</p>
+                        <p><strong>Key Topics:</strong> Bitcoin, Altcoins, TX ecosystem, tokns.fi, coherencedaddy.com</p>
                     </div>
                 </div>
             </div>
@@ -252,29 +260,44 @@
     <script>
         // Dashboard functionality
         async function loadDashboard() {
+            // Health check — controls the status dot, isolated
             try {
-                // Load system health
                 const healthResponse = await fetch('/health');
                 const healthData = await healthResponse.json();
                 updateSystemStatus(healthData);
-                
-                // Load schedule
+            } catch (error) {
+                console.error('Health check failed:', error);
+                document.getElementById('system-status').textContent = '🔴';
+                document.getElementById('system-overview').innerHTML = '<p style="color:red">Server unreachable</p>';
+            }
+
+            // Schedule — isolated, won't affect status dot
+            try {
                 const scheduleResponse = await fetch('/schedule');
                 const scheduleData = await scheduleResponse.json();
                 updateSchedule(scheduleData);
-                
-                // Load analytics
-                try {
-                    const analyticsResponse = await fetch('/analytics');
-                    const analyticsData = await analyticsResponse.json();
-                    updateMetrics(analyticsData);
-                } catch (error) {
-                    console.log('Analytics not available yet');
-                }
-                
             } catch (error) {
-                console.error('Dashboard load error:', error);
-                document.getElementById('system-status').textContent = '🔴';
+                console.error('Schedule load failed:', error);
+                document.getElementById('upcoming-schedule').innerHTML = '<p>Could not load schedule</p>';
+            }
+
+            // Analytics — isolated
+            try {
+                const analyticsResponse = await fetch('/analytics');
+                const analyticsData = await analyticsResponse.json();
+                updateMetrics(analyticsData);
+            } catch (error) {
+                console.log('Analytics not available yet');
+            }
+
+            // Publish queue — isolated
+            try {
+                const queueResponse = await fetch('/queue');
+                const queueData = await queueResponse.json();
+                updatePublishQueue(queueData);
+            } catch (error) {
+                console.error('Queue load failed:', error);
+                document.getElementById('publish-queue').innerHTML = '<p>Could not load queue</p>';
             }
         }
         
@@ -285,7 +308,7 @@
             overview.innerHTML = `
                 <p><strong>Status:</strong> ${data.initialized ? 'Initialized' : 'Initializing'}</p>
                 <p><strong>Agents Active:</strong> ${data.agents ? data.agents.length : 0}/7</p>
-                <p><strong>Uptime:</strong> ${formatUptime(process?.uptime?.() || 0)}</p>
+                <p><strong>Uptime:</strong> Running</p>
                 <p><strong>Last Updated:</strong> ${new Date().toLocaleTimeString()}</p>
             `;
             
@@ -301,21 +324,23 @@
             const schedule = document.getElementById('upcoming-schedule');
             
             if (data && data.length > 0) {
-                schedule.innerHTML = data.slice(0, 3).map(item => `
+                schedule.innerHTML = data.slice(0, 5).map(item => `
                     <div class="schedule-item">
                         <strong>${item.title || 'Content Generation'}</strong><br>
-                        <small>${new Date(item.publishTime || item.scheduledTime).toLocaleString()}</small>
+                        <small>${new Date(item.publish_time || item.publishTime || item.scheduledTime).toLocaleString()}</small>
                     </div>
                 `).join('');
-                
+
+                document.getElementById('content-count').textContent = data.length;
+
                 // Update next generation time
                 const nextItem = data[0];
                 if (nextItem) {
-                    const nextTime = new Date(nextItem.publishTime || nextItem.scheduledTime);
-                    document.getElementById('next-generation').textContent = 
-                        nextTime.toLocaleDateString() === new Date().toLocaleDateString() 
-                            ? nextTime.toLocaleTimeString() 
-                            : 'Tomorrow';
+                    const nextTime = new Date(nextItem.publish_time || nextItem.publishTime || nextItem.scheduledTime);
+                    document.getElementById('next-generation').textContent =
+                        nextTime.toLocaleDateString() === new Date().toLocaleDateString()
+                            ? nextTime.toLocaleTimeString()
+                            : nextTime.toLocaleDateString();
                 }
             } else {
                 schedule.innerHTML = `
@@ -372,6 +397,57 @@
             return `${hours}h ${minutes}m`;
         }
         
+        function updatePublishQueue(data) {
+            const el = document.getElementById('publish-queue');
+            if (!data || data.length === 0) {
+                el.innerHTML = '<p style="color:#666">No videos in queue</p>';
+                return;
+            }
+            el.innerHTML = data.map(item => `
+                <div class="schedule-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                    <div>
+                        <strong>${item.title || 'Untitled'}</strong><br>
+                        <small>${new Date(item.publishTime).toLocaleString()} &mdash; <span style="color:${item.status==='scheduled'?'#28a745':'#ffc107'}">${item.status}</span></small>
+                    </div>
+                    <button class="btn" style="margin:0;font-size:0.85em;padding:6px 12px;" onclick="publishNow('${item.productionId}', this)">
+                        ▶ Publish Now
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function publishNow(productionId, btn) {
+            if (!confirm('Upload this video to YouTube now?')) return;
+            btn.disabled = true;
+            btn.textContent = '⏳ Uploading...';
+            try {
+                const res = await fetch(`/publish/${productionId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    btn.textContent = '✅ Published!';
+                    btn.style.background = '#28a745';
+                    if (data.result?.youtubeUrl) {
+                        const link = document.createElement('a');
+                        link.href = data.result.youtubeUrl;
+                        link.target = '_blank';
+                        link.textContent = ' View on YouTube';
+                        link.style.color = '#28a745';
+                        btn.parentElement.parentElement.querySelector('div').appendChild(link);
+                    }
+                } else {
+                    btn.textContent = '❌ Failed';
+                    btn.style.background = '#dc3545';
+                    alert('Upload failed: ' + (data.error || 'Unknown error'));
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                btn.textContent = '❌ Error';
+                btn.style.background = '#dc3545';
+                alert('Error: ' + err.message);
+                btn.disabled = false;
+            }
+        }
+
         async function generateContent() {
             if (confirm('Generate content now? This will create a new video for your channel.')) {
                 try {
