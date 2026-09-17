@@ -10,6 +10,7 @@ yarn-error.log*
 .env.production
 config/credentials.json
 config/tokens.json
+client_secret*.json
 config/*.key
 config/*.pem
 
