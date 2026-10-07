@@ -1,0 +1,21 @@
+services:
+  chatterbox:
+    build: .
+    ports:
+      - "8321:8321"
+    volumes:
+      - ./voices:/app/voices
+      - hf_cache:/data/hf_cache
+    environment:
+      - CHATTERBOX_API_KEY=${CHATTERBOX_API_KEY:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  hf_cache:

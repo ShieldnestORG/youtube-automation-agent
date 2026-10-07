@@ -1,3 +1,5 @@
+const Anthropic = require('@anthropic-ai/sdk');
+const OpenAI = require('openai');
 const { Logger } = require('../utils/logger');
 
 class ScriptWriterAgent {
@@ -6,6 +8,25 @@ class ScriptWriterAgent {
     this.credentials = credentials;
     this.logger = new Logger('ScriptWriter');
     this.templates = this.loadTemplates();
+
+    const anthropicKey = credentials.anthropic?.apiKey || process.env.ANTHROPIC_API_KEY;
+    const grokKey = credentials.grok?.apiKey || process.env.GROK_API_KEY;
+    const openaiKey = credentials.openai?.apiKey || process.env.OPENAI_API_KEY;
+
+    if (anthropicKey) {
+      this.anthropic = new Anthropic.default({ apiKey: anthropicKey });
+      this.provider = 'anthropic';
+      this.model = credentials.anthropic?.model || process.env.ANTHROPIC_MODEL || 'claude-opus-4-6';
+      this.logger.info(`ScriptWriter AI ready: ${this.model} (Claude)`);
+    } else if (grokKey || openaiKey) {
+      const aiKey = grokKey || openaiKey;
+      const opts = { apiKey: aiKey };
+      if (grokKey) opts.baseURL = 'https://api.x.ai/v1';
+      this.openai = new OpenAI(opts);
+      this.provider = grokKey ? 'grok' : 'openai';
+      this.model = grokKey ? 'grok-3' : (credentials.openai?.model || 'gpt-4o-mini');
+      this.logger.info(`ScriptWriter AI ready: ${this.model} (${this.provider})`);
+    }
   }
 
   async initialize() {
@@ -46,41 +67,23 @@ class ScriptWriterAgent {
   async generateScript(strategy) {
     try {
       this.logger.info(`Generating script for: ${strategy.topic}`);
-      
-      const template = this.templates[strategy.contentType.toLowerCase()] || this.templates.explainer;
-      
-      // Generate script components
-      const hook = await this.generateHook(strategy);
-      const introduction = await this.generateIntroduction(strategy);
-      const mainContent = await this.generateMainContent(strategy, template);
-      const conclusion = await this.generateConclusion(strategy);
-      const cta = await this.generateCTA(strategy);
 
-      // Assemble complete script
-      const script = {
-        title: await this.generateTitle(strategy),
-        hook,
-        introduction,
-        mainContent,
-        conclusion,
-        callToAction: cta,
-        duration: this.estimateDuration(mainContent),
-        tone: template.tone,
-        pacing: template.pacing,
-        keywords: strategy.keywords,
-        metadata: {
-          strategy: strategy,
-          generatedAt: new Date().toISOString(),
-          version: '1.0'
+      let script;
+      const hasAI = this.anthropic || this.openai;
+      if (hasAI) {
+        try {
+          script = await this.generateScriptWithAI(strategy);
+        } catch (aiError) {
+          this.logger.warn(`AI script generation failed (${aiError.message}), falling back to templates`);
+          script = await this.generateScriptFromTemplates(strategy);
         }
-      };
+      } else {
+        script = await this.generateScriptFromTemplates(strategy);
+      }
 
-      // Format for readability
       script.fullScript = this.formatFullScript(script);
-      
-      // Save to database
       await this.db.saveScript(script);
-      
+
       this.logger.info(`Script generated: ${script.title}`);
       return script;
     } catch (error) {
@@ -89,12 +92,153 @@ class ScriptWriterAgent {
     }
   }
 
+  async generateScriptWithAI(strategy) {
+    const template = this.templates[strategy.contentType.toLowerCase()] || this.templates.explainer;
+
+    const currentYear = new Date().getFullYear();
+    const systemPrompt = `You are a professional YouTube scriptwriter for the channel Tokns_fi — a crypto, motivation, and blockchain education channel. The channel covers Bitcoin, altcoins, the TX blockchain ecosystem, txecosystem, tokns.fi, and coherencedaddy.com. The tone is confident, energetic, and approachable. Occasionally reference tokns.fi or coherencedaddy.com naturally as resources. Always output valid JSON. IMPORTANT: The current year is ${currentYear}. Never write ${currentYear - 2} or ${currentYear - 1} in titles or content — always use ${currentYear} when referencing the current year.`;
+
+    const userPrompt = `Write a complete YouTube video script for the following:
+
+Topic: ${strategy.topic}
+Angle: ${strategy.angle}
+Content Type: ${strategy.contentType}
+Target Audience: ${strategy.targetAudience}
+Tone: ${template.tone}
+Keywords to include: ${strategy.keywords.join(', ')}
+
+Return a JSON object with exactly this structure:
+{
+  "title": "compelling video title",
+  "hook": {
+    "type": "question|statistic|statement|challenge|promise",
+    "text": "first 5 seconds spoken text — must grab attention immediately",
+    "duration": "0:00-0:05"
+  },
+  "introduction": {
+    "greeting": "opening line welcoming viewers",
+    "topicIntro": "1-2 sentences introducing the topic",
+    "valueProposition": "what viewers will learn/gain",
+    "credibility": "why they should trust this content",
+    "duration": "0:05-0:20"
+  },
+  "mainContent": {
+    "sections": [
+      {
+        "type": "section_type",
+        "title": "Section Title",
+        "content": ["line 1", "line 2", "line 3"],
+        "visuals": ["visual suggestion"],
+        "duration": 60
+      }
+    ],
+    "totalDuration": 300
+  },
+  "conclusion": {
+    "type": "conclusion",
+    "title": "Wrapping Up",
+    "recap": ["recap point 1", "recap point 2", "recap point 3"],
+    "finalThought": "memorable closing thought",
+    "duration": "30 seconds"
+  },
+  "callToAction": {
+    "type": "call_to_action",
+    "subscribe": "subscribe prompt",
+    "like": "like prompt",
+    "comment": "comment prompt with a question",
+    "nextVideo": "tease next related content",
+    "duration": "15 seconds"
+  },
+  "tone": "${template.tone}",
+  "pacing": "${template.pacing}",
+  "keywords": ${JSON.stringify(strategy.keywords)}
+}
+
+Write 3-4 main content sections. Make the script natural and conversational, not robotic. Total video length should be 4-5 minutes (about 240-300 seconds of spoken content).`;
+
+    let rawText;
+
+    if (this.provider === 'anthropic') {
+      // Adaptive thinking only supported on Opus/Sonnet 4.6+, not Haiku
+      const supportsThinking = !this.model.includes('haiku');
+      const requestParams = {
+        model: this.model,
+        max_tokens: supportsThinking ? 64000 : 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      };
+      if (supportsThinking) requestParams.thinking = { type: 'adaptive' };
+
+      const stream = this.anthropic.messages.stream(requestParams);
+      const message = await stream.finalMessage();
+      rawText = message.content.find(b => b.type === 'text')?.text || '';
+      // Extract just the JSON object — strip any surrounding text/markdown
+      const jsonStart = rawText.indexOf('{');
+      const jsonEnd = rawText.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        rawText = rawText.slice(jsonStart, jsonEnd + 1);
+      }
+    } else {
+      const response = await this.openai.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.8
+      });
+      rawText = response.choices[0].message.content;
+    }
+
+    const parsed = JSON.parse(rawText);
+
+    return {
+      ...parsed,
+      duration: this.estimateDuration(parsed.mainContent),
+      metadata: {
+        strategy,
+        generatedAt: new Date().toISOString(),
+        version: '2.0-ai',
+        model: this.model,
+        provider: this.provider
+      }
+    };
+  }
+
+  async generateScriptFromTemplates(strategy) {
+    const template = this.templates[strategy.contentType.toLowerCase()] || this.templates.explainer;
+    const hook = await this.generateHook(strategy);
+    const introduction = await this.generateIntroduction(strategy);
+    const mainContent = await this.generateMainContent(strategy, template);
+    const conclusion = await this.generateConclusion(strategy);
+    const cta = await this.generateCTA(strategy);
+
+    return {
+      title: await this.generateTitle(strategy),
+      hook,
+      introduction,
+      mainContent,
+      conclusion,
+      callToAction: cta,
+      duration: this.estimateDuration(mainContent),
+      tone: template.tone,
+      pacing: template.pacing,
+      keywords: strategy.keywords,
+      metadata: {
+        strategy,
+        generatedAt: new Date().toISOString(),
+        version: '1.0-template'
+      }
+    };
+  }
+
   async generateTitle(strategy) {
     const templates = [
       `${strategy.angle}`,
       `${strategy.topic}: The Complete Guide`,
       `Everything You Need to Know About ${strategy.topic}`,
-      `${strategy.topic} in ${new Date().getFullYear()}: What's Changed?`,
+      `${strategy.topic} in ${new Date().getFullYear()}: What You Need to Know`,
       `The Truth About ${strategy.topic} (Shocking Results)`,
       `How to Master ${strategy.topic} in 30 Days`,
       `${strategy.topic}: Beginner to Expert Guide`
@@ -587,11 +731,12 @@ class ScriptWriterAgent {
     const totalSeconds = mainContent.sections.reduce((total, section) => {
       return total + (section.duration || 60);
     }, 0);
-    
+
     // Add hook, intro, conclusion, CTA
     const fullDuration = totalSeconds + 5 + 15 + 30 + 15;
-    
-    return this.formatDuration(fullDuration);
+
+    // Cap at 5 minutes
+    return this.formatDuration(Math.min(fullDuration, 300));
   }
 
   formatDuration(seconds) {

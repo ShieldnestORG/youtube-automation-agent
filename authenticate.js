@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +10,7 @@ async function authenticate() {
   
   try {
     // Load credentials
-    const credentialsPath = path.join(__dirname, 'config', 'credentials.json');
+    const credentialsPath = process.env.YOUTUBE_CREDENTIALS_PATH || path.join(__dirname, 'config', 'credentials.json');
     const credentials = JSON.parse(fs.readFileSync(credentialsPath));
     
     const oauth2Client = new google.auth.OAuth2(

@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const { Logger } = require('../utils/logger');
 
@@ -43,7 +44,18 @@ class PublishingSchedulingAgent {
   async scheduleContent(productionData) {
     try {
       this.logger.info(`Scheduling content: ${productionData.id}`);
-      
+
+      // Refuse to queue simulated / missing video files
+      const finalVideo = productionData.assets?.finalVideo;
+      if (!finalVideo?.path || finalVideo?.simulated) {
+        const reason = finalVideo?.reason || 'video assembly was skipped or simulated';
+        this.logger.error(
+          `⚠️  Skipping queue for "${productionData.script?.title}" — ${reason}. ` +
+          `Fix your API keys in .env and re-run to produce a real video.`
+        );
+        return null;
+      }
+
       const scheduleEntry = {
         productionId: productionData.id,
         title: productionData.script.title,
@@ -76,12 +88,12 @@ class PublishingSchedulingAgent {
     try {
       this.logger.info(`Publishing content: ${contentId}`);
       
-      const scheduleEntry = this.publishQueue.find(entry => 
-        entry.productionId === contentId || entry.id === contentId
+      const scheduleEntry = this.publishQueue.find(entry =>
+        entry.id === contentId || entry.productionId === contentId
       );
-      
+
       if (!scheduleEntry) {
-        throw new Error(`Content not found in queue: ${contentId}`);
+        throw new Error(`Content not found in queue: ${contentId}. Queue IDs: ${this.publishQueue.map(e => e.id).join(', ')}`);
       }
       
       // Upload video to YouTube
@@ -109,19 +121,41 @@ class PublishingSchedulingAgent {
   async uploadToYouTube(scheduleEntry) {
     const { metadata } = scheduleEntry;
     
+    // Sanitize tags — YouTube only allows letters, numbers, and spaces in tags
+    const rawTags = (metadata.seo.tags || []);
+    const cleanTags = rawTags
+      .map(t => t.replace(/[_]/g, ' ')           // underscores → spaces
+                 .replace(/[^\w\s]/g, '')          // strip all other special chars
+                 .replace(/\s+/g, ' ')
+                 .trim()
+                 .toLowerCase())
+      .filter(t => {
+        if (t.length < 2 || t.length > 100) return false;
+        if (!/[a-zA-Z]/.test(t)) return false;    // must have at least one letter
+        if (!/\s/.test(t) && t.length > 25) return false; // reject long no-space blobs
+        return true;
+      })
+      .filter((t, i, arr) => arr.indexOf(t) === i) // dedupe
+      .slice(0, 30);
+
+    // publishAt only works with privacyStatus:'private'; past dates are rejected
+    const publishAt = new Date(scheduleEntry.publishTime);
+    const isFuture = publishAt > new Date(Date.now() + 60 * 1000); // >1 min from now
+    const privacyStatus = isFuture ? 'private' : 'public';
+
     // Prepare video metadata
     const videoMetadata = {
       snippet: {
-        title: metadata.seo.title,
-        description: metadata.seo.description,
-        tags: metadata.seo.tags,
-        categoryId: metadata.seo.metadata.category.toString(),
-        defaultLanguage: metadata.seo.metadata.language,
-        defaultAudioLanguage: metadata.seo.metadata.language
+        title: metadata.seo.title.slice(0, 100),
+        description: (metadata.seo.description || '').slice(0, 5000),
+        tags: cleanTags,
+        categoryId: (metadata.seo.metadata?.category || 22).toString(),
+        defaultLanguage: metadata.seo.metadata?.language || 'en',
+        defaultAudioLanguage: metadata.seo.metadata?.language || 'en'
       },
       status: {
-        privacyStatus: process.env.DEFAULT_PRIVACY_STATUS || 'public',
-        publishAt: scheduleEntry.publishTime,
+        privacyStatus,
+        ...(isFuture ? { publishAt: publishAt.toISOString() } : {}),
         selfDeclaredMadeForKids: false
       }
     };
@@ -152,13 +186,33 @@ class PublishingSchedulingAgent {
   }
 
   async getVideoStream(videoPath) {
-    // In a real implementation, this would return a file stream
-    // For now, we'll simulate it
-    return JSON.stringify({
-      message: 'Video stream would be provided here',
-      path: videoPath,
-      timestamp: new Date().toISOString()
-    });
+    // Reject simulation/placeholder files immediately
+    if (!videoPath.endsWith('.mp4')) {
+      throw new Error(
+        `Video path is not an MP4 — got "${videoPath}". ` +
+        `This usually means TTS or image generation was simulated (no API keys active). ` +
+        `Check your GROK_API_KEY / OPENAI_API_KEY / GOOGLE_TTS_API_KEY in .env and re-run.`
+      );
+    }
+
+    await fs.access(videoPath);
+    const stat = await fs.stat(videoPath);
+    if (stat.size === 0) throw new Error(`Video file is empty: ${videoPath}`);
+
+    // Verify MP4 magic bytes (ftyp box at offset 4)
+    const fd = await fs.open(videoPath, 'r');
+    const buf = Buffer.alloc(12);
+    await fd.read(buf, 0, 12, 0);
+    await fd.close();
+    const magic = buf.toString('ascii', 4, 8);
+    if (magic !== 'ftyp' && magic !== 'moov' && magic !== 'mdat') {
+      throw new Error(
+        `File at "${videoPath}" does not appear to be a valid MP4 (magic: "${magic}"). ` +
+        `The pipeline likely fell back to simulation — check logs for the underlying TTS/image error.`
+      );
+    }
+
+    return fsSync.createReadStream(videoPath);
   }
 
   async uploadThumbnail(videoId, thumbnailPath) {

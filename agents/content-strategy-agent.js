@@ -156,13 +156,16 @@ class ContentStrategyAgent {
 
   extractKeywords(text) {
     // Simple keyword extraction
-    const stopWords = ['the', 'is', 'at', 'which', 'on', 'and', 'a', 'an', 'as', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'could', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'can', 'will', 'just', 'should', 'now'];
-    
+    const stopWords = ['the', 'is', 'at', 'which', 'on', 'and', 'a', 'an', 'as', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'could', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'can', 'will', 'just', 'should', 'now',
+      // YouTube title junk words
+      'official', 'video', 'music', 'audio', 'lyric', 'lyrics', 'feat', 'with', 'from', 'full', 'live', 'episode', 'season', 'part', 'clip', 'trailer', 'teaser', 'premiere', 'reaction', 'highlight', 'highlights', 'ft', 'prod', 'this', 'that', 'your', 'their', 'there', 'about', 'into', 'also', 'after', 'before', 'make', 'made', 'like', 'look', 'know', 'want', 'gets', 'goes', 'back', 'even', 'over', 'year', 'time', 'new', 'first'
+    ];
+
     return text
       .toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(/\s+/)
-      .filter(word => word.length > 3 && !stopWords.includes(word));
+      .filter(word => word.length > 4 && !stopWords.includes(word));
   }
 
   mergeTrendData(trends, competitors) {
@@ -247,33 +250,140 @@ class ContentStrategyAgent {
   }
 
   selectOptimalTopic() {
-    // Use scoring algorithm to select best topic
     const recentTopics = this.getRecentTopics();
-    
-    const scoredTopics = this.trendingTopics
-      .filter(topic => !recentTopics.includes(topic.topic))
-      .map(topic => ({
-        ...topic,
-        finalScore: topic.score * this.getSeasonalMultiplier(topic.topic) * this.getAudienceMultiplier(topic.topic)
-      }));
+    // Always use niche topic pool — channel is crypto/motivation/TX ecosystem
+    return this.getNicheTopic(recentTopics);
+  }
 
-    return scoredTopics[0] || { topic: 'Technology Trends', score: 1 };
+  isQualityTopic(topic) {
+    if (topic.length < 5) return false;
+    const vagueWords = ['pinky', 'drake', 'taylor', 'beyonce', 'rihanna', 'kanye', 'katseye', 'video', 'remix', 'watch', 'people', 'things', 'times', 'official'];
+    return !vagueWords.includes(topic.toLowerCase());
+  }
+
+  getNicheTopic(recentTopics = []) {
+    const nicheTopics = [
+      // Crypto & Bitcoin
+      'Bitcoin price prediction 2026',
+      'how to buy crypto for beginners',
+      'crypto bull run signals to watch',
+      'best altcoins to buy right now',
+      'crypto portfolio strategy beginners',
+      'Bitcoin vs Ethereum which is better',
+      'DeFi explained simply',
+      'crypto passive income strategies',
+      'how to read crypto charts',
+      'crypto mistakes beginners make',
+      // TX Blockchain / Ecosystem
+      'TX blockchain explained',
+      'TX ecosystem coins to watch',
+      'txecosystem hidden gems 2026',
+      'tokns.fi how it works',
+      'TX blockchain vs Ethereum',
+      'TX ecosystem staking guide',
+      'coherencedaddy crypto picks',
+      'TX blockchain use cases real world',
+      'how to stake on TX ecosystem',
+      'TX ecosystem growth potential',
+      // Motivation & Mindset
+      'how to stay motivated every day',
+      'morning routine millionaires follow',
+      'mindset shifts that change your life',
+      'discipline over motivation explained',
+      'how successful people think differently',
+      'stop procrastinating for good',
+      'building wealth from zero',
+      'crypto millionaire mindset',
+      'financial freedom roadmap 2026',
+      'how to think like an investor',
+    ];
+
+    const unused = nicheTopics.filter(t => !recentTopics.includes(t));
+    const pick = unused[Math.floor(Math.random() * unused.length)] || nicheTopics[0];
+    return { topic: pick, score: 5 };
   }
 
   async generateAngle(topic) {
-    // Generate unique angle for the topic
-    const angles = [
-      `The Ultimate Guide to ${topic}`,
-      `${topic}: What Nobody Is Telling You`,
-      `How ${topic} Will Change Everything in 2025`,
-      `The Hidden Truth About ${topic}`,
-      `${topic} Explained in 5 Minutes`,
-      `Why ${topic} Is More Important Than You Think`,
-      `${topic}: Expert Secrets Revealed`,
-      `The Complete ${topic} Tutorial for Beginners`
-    ];
+    const year = new Date().getFullYear();
+    const t = topic.toLowerCase();
 
-    return angles[Math.floor(Math.random() * angles.length)];
+    // Comparison topics: "X vs Y" or "X or Y which is better"
+    if (/\bvs\.?\b|\bversus\b|\bwhich is\b|\bor\b.*\bbetter\b/i.test(topic)) {
+      const clean = topic.replace(/\s*which is better\??/i, '').replace(/\s*vs\.?\s*/i, ' vs ').trim();
+      const angles = [
+        `${clean}: The Real Difference`,
+        `${clean} — Which One Should You Choose?`,
+        `${clean}: Honest Breakdown in ${year}`,
+        `The Truth About ${clean}`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // How-to topics
+    if (/^how to /i.test(topic)) {
+      const subject = topic.replace(/^how to /i, '');
+      const angles = [
+        `How to ${subject} (Step-by-Step Guide)`,
+        `The Right Way to ${subject} in ${year}`,
+        `${subject}: What No One Tells Beginners`,
+        `Master ${subject} Faster Than You Think`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // Price / prediction / market topics
+    if (/price|prediction|bull run|signals|altcoin|buy.*now/i.test(t)) {
+      const angles = [
+        `${topic}: What the Data Actually Shows`,
+        `${topic} — Here's What to Expect in ${year}`,
+        `${topic}: The Honest Breakdown`,
+        `${topic} — Experts Won't Tell You This`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // Motivation / mindset / discipline topics
+    if (/mindset|motivat|discipline|procrastinat|morning routine|successful people|think like|financial freedom/i.test(t)) {
+      const angles = [
+        `${topic} — This One Shift Changes Everything`,
+        `The Uncomfortable Truth: ${topic}`,
+        `${topic}: Why Most People Get It Wrong`,
+        `${topic} — Here's What Actually Works`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // TX ecosystem / tokns.fi / coherencedaddy
+    if (/\btx\b|tokns|coherence/i.test(t)) {
+      const angles = [
+        `${topic}: What You Need to Know in ${year}`,
+        `${topic} — The Complete Breakdown`,
+        `Why ${topic} Is Turning Heads Right Now`,
+        `${topic}: Early Mover Advantage Explained`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // DeFi / staking / passive income
+    if (/defi|staking|passive income|portfolio|strategy/i.test(t)) {
+      const angles = [
+        `${topic}: Beginner's Guide ${year}`,
+        `${topic} — The Strategy That Actually Works`,
+        `${topic}: What Nobody Explains Clearly`,
+        `${topic} Explained Simply`,
+      ];
+      return angles[Math.floor(Math.random() * angles.length)];
+    }
+
+    // Generic crypto/blockchain fallback
+    const fallback = [
+      `${topic}: What the Data Says in ${year}`,
+      `${topic} — The Honest Guide`,
+      `Everything You Need to Know About ${topic}`,
+      `${topic}: The Truth Most Won't Tell You`,
+      `${topic} Explained (No Hype)`,
+    ];
+    return fallback[Math.floor(Math.random() * fallback.length)];
   }
 
   async identifyTargetAudience(topic) {

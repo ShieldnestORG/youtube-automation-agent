@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const { Logger } = require('./utils/logger');
@@ -129,6 +130,23 @@ class YouTubeAutomationAgent {
       try {
         const schedule = await this.db.getUpcomingSchedule();
         res.json(schedule);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Get publish queue with IDs (for dashboard publish buttons)
+    this.app.get('/queue', async (req, res) => {
+      try {
+        const queue = this.agents.publishing.publishQueue.map(entry => ({
+          id: entry.id,
+          productionId: entry.productionId || entry.id,
+          title: entry.title,
+          status: entry.status,
+          publishTime: entry.publishTime,
+          videoPath: entry.metadata?.video?.path || null
+        }));
+        res.json(queue);
       } catch (error) {
         res.status(500).json({ error: error.message });
       }

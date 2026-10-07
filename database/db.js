@@ -409,6 +409,8 @@ class Database {
     
     return rows.map(row => ({
       ...row,
+      productionId: row.production_id,
+      publishTime: row.publish_time,
       metadata: JSON.parse(row.metadata || '{}')
     }));
   }
