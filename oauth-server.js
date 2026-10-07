@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const { google } = require('googleapis');
 const fs = require('fs');
@@ -66,8 +67,8 @@ class OAuthServer {
   }
 
   async exchangeCodeForTokens(code) {
-    const credentialsPath = path.join(__dirname, 'config', 'credentials.json');
-    const tokensPath = path.join(__dirname, 'config', 'tokens.json');
+    const credentialsPath = process.env.YOUTUBE_CREDENTIALS_PATH || path.join(__dirname, 'config', 'credentials.json');
+    const tokensPath = process.env.YOUTUBE_TOKENS_PATH || path.join(__dirname, 'config', 'tokens.json');
     
     const credentials = JSON.parse(fs.readFileSync(credentialsPath));
     
@@ -111,7 +112,7 @@ class OAuthServer {
   }
 
   generateAuthUrl() {
-    const credentialsPath = path.join(__dirname, 'config', 'credentials.json');
+    const credentialsPath = process.env.YOUTUBE_CREDENTIALS_PATH || path.join(__dirname, 'config', 'credentials.json');
     const credentials = JSON.parse(fs.readFileSync(credentialsPath));
     
     const oauth2Client = new google.auth.OAuth2(

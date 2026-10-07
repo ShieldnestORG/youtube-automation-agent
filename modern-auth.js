@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
@@ -7,8 +8,8 @@ const { URL } = require('url');
 
 class ModernAuth {
   constructor() {
-    this.credentialsPath = path.join(__dirname, 'config', 'credentials.json');
-    this.tokensPath = path.join(__dirname, 'config', 'tokens.json');
+    this.credentialsPath = process.env.YOUTUBE_CREDENTIALS_PATH || path.join(__dirname, 'config', 'credentials.json');
+    this.tokensPath = process.env.YOUTUBE_TOKENS_PATH || path.join(__dirname, 'config', 'tokens.json');
     this.server = null;
   }
 

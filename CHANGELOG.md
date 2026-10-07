@@ -74,6 +74,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Dashboard rebranded from "Ethereal Dreamscript" → "Tokns_fi"; channel focus updated to Crypto / TX Blockchain / Motivation
 - `database/db.js` queue rows now expose `productionId` and `publishTime` fields
 - `index.js` loads `dotenv` at startup
+- **OAuth credential and token file paths are now overridable** via `YOUTUBE_CREDENTIALS_PATH` and `YOUTUBE_TOKENS_PATH` — both default to `config/credentials.json` and `config/tokens.json`, so existing installs are unaffected. Lets the live credential files sit outside the repo directory
+- `authenticate.js`, `modern-auth.js`, `oauth-server.js`, `simple-auth.js` and `utils/credential-manager.js` now load `dotenv` at startup — each is a standalone entry point (`npm run setup`, `npm run credentials:setup`, `node modern-auth.js`) that previously never read `.env`, so the new path vars would have been ignored there
 
 ### Fixed
 - Thumbnail generation was using a hardcoded placeholder title instead of the video's real title

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const fs = require('fs').promises;
 const path = require('path');
 const { google } = require('googleapis');
@@ -8,8 +9,8 @@ const { Logger } = require('./logger');
 class CredentialManager {
   constructor() {
     this.logger = new Logger('CredentialManager');
-    this.credentialsPath = path.join(__dirname, '..', 'config', 'credentials.json');
-    this.tokensPath = path.join(__dirname, '..', 'config', 'tokens.json');
+    this.credentialsPath = process.env.YOUTUBE_CREDENTIALS_PATH || path.join(__dirname, '..', 'config', 'credentials.json');
+    this.tokensPath = process.env.YOUTUBE_TOKENS_PATH || path.join(__dirname, '..', 'config', 'tokens.json');
     this.credentials = {};
     this.tokens = {};
   }

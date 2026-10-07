@@ -114,6 +114,11 @@ GOOGLE_TTS_LANGUAGE=en-US
 YOUTUBE_REGION=US
 DEFAULT_PRIVACY_STATUS=public
 
+# OAuth Credential Storage (optional — absolute paths)
+# Unset = config/credentials.json and config/tokens.json inside the repo
+YOUTUBE_CREDENTIALS_PATH=
+YOUTUBE_TOKENS_PATH=
+
 # Channel Identity
 CHANNEL_NAME=Tokns_fi
 TARGET_AUDIENCE=crypto investors, TX ecosystem followers, self-improvement seekers
